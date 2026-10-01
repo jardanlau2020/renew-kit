@@ -1,18 +1,23 @@
 name: renew-kit runner
 description: >-
-  跑一个续期脚本：装好 Python 与 renewkit，执行脚本，失败时兜底发 Telegram 通知。
-  面板凭据通过调用方 step 的 env 传入即可（composite action 会继承），无需在 action 里声明。
+  跑一个续期脚本：装好系统/ Python 依赖与 renewkit，执行脚本，
+  失败时兜底发 Telegram 通知并可上传排障产物。
+  面板凭据通过调用方 step 的 env 传入即可（composite action 会继承），无需在此声明。
 
 inputs:
   script:
-    description: 要执行的脚本路径（相对仓库根）
+    description: 要执行的脚本路径（相对 working-directory）
     required: true
   python-version:
     description: Python 版本
     required: false
     default: "3.12"
   requirements:
-    description: 额外的 requirements 文件（可选）
+    description: 额外的 requirements 文件（可选；不填则自动用 requirements.txt）
+    required: false
+    default: ""
+  pip-packages:
+    description: 直接 pip 安装的包，空格分隔（如 "seleniumbase requests"）
     required: false
     default: ""
   working-directory:
@@ -20,13 +25,37 @@ inputs:
     required: false
     default: "."
   install-renewkit:
-    description: 是否安装 renewkit（脚本已经 vendored 时可关掉）
+    description: 是否安装 renewkit（脚本已 vendored 时可关掉）
     required: false
     default: "true"
   renewkit-ref:
     description: renewkit 的 git ref
     required: false
     default: "main"
+  apt-packages:
+    description: 需要 apt 安装的系统包，空格分隔（如 "xvfb x11-utils scrot"）
+    required: false
+    default: ""
+  setup-command:
+    description: 主脚本执行前的准备命令（如挂代理：bash ./setup_proxy.sh）
+    required: false
+    default: ""
+  setup-continue-on-error:
+    description: setup-command 失败是否继续
+    required: false
+    default: "true"
+  command:
+    description: 覆盖主命令（默认 `python <script>`，如 "xvfb-run --auto-servernum python3 app.py"）
+    required: false
+    default: ""
+  artifact-paths:
+    description: 失败时上传的排障产物路径（多行，如 "*.png\nlatest_logs/"）
+    required: false
+    default: ""
+  artifact-name:
+    description: 产物名
+    required: false
+    default: "failure-artifacts"
   notify-on-failure:
     description: 脚本失败时兜底发一条 Telegram 通知
     required: false
@@ -35,13 +64,21 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install apt packages
+      if: inputs.apt-packages != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y ${{ inputs.apt-packages }}
+
     - name: Set up Python ${{ inputs.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
         cache: pip
 
-    - name: Install dependencies
+    - name: Install Python dependencies
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
@@ -50,18 +87,44 @@ runs:
         if [ "${{ inputs.install-renewkit }}" = "true" ]; then
           pip install "renewkit @ git+https://github.com/${{ github.repository_owner }}/renew-kit@${{ inputs.renewkit-ref }}"
         fi
-        if [ -n "${{ inputs.requirements }}" ] && [ -f "${{ inputs.requirements }}" ]; then
-          pip install -r "${{ inputs.requirements }}"
+        REQ="${{ inputs.requirements }}"
+        if [ -n "$REQ" ] && [ -f "$REQ" ]; then
+          pip install -r "$REQ"
         elif [ -f requirements.txt ]; then
           pip install -r requirements.txt
         fi
+        if [ -n "${{ inputs.pip-packages }}" ]; then
+          pip install ${{ inputs.pip-packages }}
+        fi
+
+    - name: Setup (pre-run)
+      if: inputs.setup-command != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      continue-on-error: ${{ inputs.setup-continue-on-error == 'true' }}
+      run: |
+        set -uo pipefail
+        ${{ inputs.setup-command }}
 
     - name: Run renewal script
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
         set -uo pipefail
-        python "${{ inputs.script }}"
+        if [ -n "${{ inputs.command }}" ]; then
+          ${{ inputs.command }}
+        else
+          python "${{ inputs.script }}"
+        fi
+
+    - name: Upload failure artifacts
+      if: failure() && inputs.artifact-paths != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.artifact-paths }}
+        if-no-files-found: ignore
+        retention-days: 3
 
     - name: Fallback Telegram notice on failure
       if: failure() && inputs.notify-on-failure == 'true'
