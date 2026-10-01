@@ -12,7 +12,17 @@ from typing import Any
 
 from . import notify
 from .outcome import Outcome
-from .timeutil import days_left, format_expiry
+from .timeutil import days_left, format_expiry, is_day_count
+
+
+def _expiry_phrase(expire) -> str:
+    """把到期信息说成人话：天数是「剩 N 天」，时间点是「MM-DD HH:MM 到期」。"""
+    if expire in (None, "", 0):
+        return ""
+    if is_day_count(expire):
+        return f"剩 {int(float(expire))} 天"
+    exp = format_expiry(expire)
+    return f"{exp} 到期" if exp else ""
 
 
 @dataclass
@@ -49,7 +59,10 @@ class TargetResult:
             l2 = f"⚠️ {self.detail or '执行失败'} · 请登录面板手动处理"
         else:  # SKIPPED
             l1 = f"{o.icon} {self.name} · 状态良好{rem}"
-            info = [f"{exp} 到期"] if exp else []
+            info = []
+            phrase = _expiry_phrase(self.expire)
+            if phrase:
+                info.append(phrase)
             info.append(self.detail or "未到续期窗口")
             l2 = "ℹ️ " + " · ".join(info)
         return [l1, l2]

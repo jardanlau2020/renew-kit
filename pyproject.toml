@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "renewkit"
-version = "0.1.0"
+version = "0.1.1"
 description = "免费主机自动续期脚本的公共骨架（重试 / 结果分类 / 通知 / 报告）"
 readme = "README.md"
 requires-python = ">=3.10"

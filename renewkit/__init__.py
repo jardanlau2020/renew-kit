@@ -16,7 +16,7 @@
 from .outcome import Outcome, classify_status
 from .report import RenewReport, TargetResult
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "Outcome",

@@ -22,6 +22,15 @@ _TIMESTAMP_S_MIN = 1e9
 _TIMESTAMP_MS_MIN = 1e11
 
 
+def is_day_count(value) -> bool:
+    """判断 renewal 是「剩余天数」而不是时间点。"""
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return False
+    return 0 <= n < _DAYS_AS_NUMBER_MAX
+
+
 def _to_epoch(value) -> float | None:
     """把各种格式归一成 UTC epoch 秒；无法判断返回 None。"""
     if value in (None, "", 0):

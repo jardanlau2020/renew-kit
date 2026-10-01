@@ -40,3 +40,15 @@ def test_counts():
     r.add("b", Outcome.RENEWED)
     r.add("c", Outcome.SKIPPED)
     assert r.counts() == {"renewed": 2, "skipped": 1}
+
+
+def test_skipped_with_day_count_reads_naturally():
+    """回归：renewal=27（剩余天数）不能渲染成「27 天后 到期」。"""
+    lines = TargetResult("srv", Outcome.SKIPPED, expire=27).lines()
+    assert "剩 27 天" in lines[1]
+    assert "27 天后 到期" not in lines[1]
+
+
+def test_skipped_with_timestamp_reads_as_date():
+    lines = TargetResult("srv", Outcome.SKIPPED, expire="2026-10-31T12:00:00").lines()
+    assert "10-31 12:00 到期" in lines[1]
