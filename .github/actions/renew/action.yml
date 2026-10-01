@@ -12,6 +12,15 @@ inputs:
     description: Python 版本
     required: false
     default: "3.12"
+  pip-cache:
+    description: >-
+      pip 缓存：auto（默认，检测到 requirements.txt/pyproject.toml 才开）/
+      true（强制开）/ false（强制关）。
+      注意：仓库没有依赖文件时 setup-python 的 cache=pip 会直接报
+      "No file ... matched to [**/requirements.txt or **/pyproject.toml]" 并失败，
+      所以默认 auto 而不是 true。
+    required: false
+    default: "auto"
   requirements:
     description: 额外的 requirements 文件（可选；不填则自动用 requirements.txt）
     required: false
@@ -69,14 +78,39 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        sudo apt-get update
-        sudo apt-get install -y ${{ inputs.apt-packages }}
+        # Acquire::Retries 抵御镜像偶发抖动（实测 fonts-noto-cjk 61MB 曾在
+        # azure.archive.ubuntu.com 上卡 548s）
+        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get install -y -o Acquire::Retries=3 ${{ inputs.apt-packages }}
+
+    - name: Resolve pip cache mode
+      id: pipcache
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -uo pipefail
+        mode="${{ inputs.pip-cache }}"
+        if [ "$mode" = "false" ]; then
+          echo "value=" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        if [ "$mode" = "true" ]; then
+          echo "value=pip" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        # auto：没有依赖文件就关缓存，否则 setup-python 会硬失败
+        if find . -maxdepth 3 -not -path './.git/*' \
+             \( -name requirements.txt -o -name pyproject.toml \) -print -quit | grep -q .; then
+          echo "value=pip" >> "$GITHUB_OUTPUT"
+          echo "pip cache: 开启（检测到依赖文件）"
+        else
+          echo "value=" >> "$GITHUB_OUTPUT"
+          echo "pip cache: 关闭（未检测到 requirements.txt / pyproject.toml）"
+        fi
 
     - name: Set up Python ${{ inputs.python-version }}
       uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
-        cache: pip
+        cache: ${{ steps.pipcache.outputs.value }}
 
     - name: Install Python dependencies
       shell: bash
