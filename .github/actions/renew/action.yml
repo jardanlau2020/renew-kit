@@ -1,0 +1,82 @@
+name: renew-kit runner
+description: >-
+  跑一个续期脚本：装好 Python 与 renewkit，执行脚本，失败时兜底发 Telegram 通知。
+  面板凭据通过调用方 step 的 env 传入即可（composite action 会继承），无需在 action 里声明。
+
+inputs:
+  script:
+    description: 要执行的脚本路径（相对仓库根）
+    required: true
+  python-version:
+    description: Python 版本
+    required: false
+    default: "3.12"
+  requirements:
+    description: 额外的 requirements 文件（可选）
+    required: false
+    default: ""
+  working-directory:
+    description: 工作目录
+    required: false
+    default: "."
+  install-renewkit:
+    description: 是否安装 renewkit（脚本已经 vendored 时可关掉）
+    required: false
+    default: "true"
+  renewkit-ref:
+    description: renewkit 的 git ref
+    required: false
+    default: "main"
+  notify-on-failure:
+    description: 脚本失败时兜底发一条 Telegram 通知
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        if [ "${{ inputs.install-renewkit }}" = "true" ]; then
+          pip install "renewkit @ git+https://github.com/${{ github.repository_owner }}/renew-kit@${{ inputs.renewkit-ref }}"
+        fi
+        if [ -n "${{ inputs.requirements }}" ] && [ -f "${{ inputs.requirements }}" ]; then
+          pip install -r "${{ inputs.requirements }}"
+        elif [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+
+    - name: Run renewal script
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -uo pipefail
+        python "${{ inputs.script }}"
+
+    - name: Fallback Telegram notice on failure
+      if: failure() && inputs.notify-on-failure == 'true'
+      shell: bash
+      run: |
+        set -uo pipefail
+        TOKEN="${TG_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}"
+        CHAT="${TG_CHAT_ID:-${TELEGRAM_CHAT_ID:-}}"
+        if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then
+          echo "未配置 Telegram，跳过兜底通知"
+          exit 0
+        fi
+        TEXT="🚨 ${{ github.repository }} · 续期脚本异常退出
+        ℹ️ 运行: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        curl -sS --max-time 20 -o /dev/null \
+          "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+          --data-urlencode "chat_id=${CHAT}" \
+          --data-urlencode "text=${TEXT}" || true

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "renewkit"
+version = "0.1.0"
+description = "免费主机自动续期脚本的公共骨架（重试 / 结果分类 / 通知 / 报告）"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["requests>=2.32"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["renewkit*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

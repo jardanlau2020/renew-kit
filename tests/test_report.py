@@ -1,0 +1,42 @@
+from renewkit.outcome import Outcome
+from renewkit.report import RenewReport, TargetResult
+
+
+def test_empty_report():
+    r = RenewReport("Host-Ship")
+    assert r.exit_code == 0
+    assert "未发现服务器实例" in r.render()
+
+
+def test_transient_does_not_fail_job():
+    """核心回归：上游 522 不能让 job 标红。"""
+    r = RenewReport("MonkeyBytes")
+    r.add("monkey-1", Outcome.TRANSIENT, detail="面板 522")
+    assert r.exit_code == 0
+    assert r.worst is Outcome.TRANSIENT
+    text = r.render()
+    assert "上游暂不可用" in text
+
+
+def test_failed_makes_job_red():
+    r = RenewReport("X")
+    r.add("srv", Outcome.FAILED, detail="登录失败")
+    assert r.exit_code == 1
+    assert "需要人工处理" in r.render()
+
+
+def test_renewed_report_two_lines_per_target():
+    r = RenewReport("Host-Ship")
+    r.add("srv-a", Outcome.RENEWED, expire=30)
+    lines = TargetResult("srv-a", Outcome.RENEWED, expire=30).lines()
+    assert len(lines) == 2
+    assert lines[0].startswith("✅")
+    assert "30 天后" in lines[0]
+
+
+def test_counts():
+    r = RenewReport("X")
+    r.add("a", Outcome.RENEWED)
+    r.add("b", Outcome.RENEWED)
+    r.add("c", Outcome.SKIPPED)
+    assert r.counts() == {"renewed": 2, "skipped": 1}
