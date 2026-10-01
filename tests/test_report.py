@@ -52,3 +52,18 @@ def test_skipped_with_day_count_reads_naturally():
 def test_skipped_with_timestamp_reads_as_date():
     lines = TargetResult("srv", Outcome.SKIPPED, expire="2026-10-31T12:00:00").lines()
     assert "10-31 12:00 到期" in lines[1]
+
+
+def test_unknown_renders_distinctly_and_does_not_fail_job():
+    r = RenewReport("katabump")
+    r.add("acct", Outcome.UNKNOWN, detail="未检测到明确提示")
+    assert r.exit_code == 0
+    text = r.render()
+    assert "结果未确认" in text
+    assert "❓" in text
+
+
+def test_shorten_flattens_and_truncates():
+    from renewkit.report import shorten
+    assert shorten("a\n  b\tc") == "a b c"
+    assert shorten("x" * 100, limit=10) == "x" * 9 + "…"

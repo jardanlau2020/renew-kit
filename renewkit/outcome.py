@@ -12,6 +12,7 @@ class Outcome(str, Enum):
     RENEWED = "renewed"          # 本次确实续期成功
     SKIPPED = "skipped"          # 未到续期窗口，无需操作（正常）
     ALREADY_MAX = "already_max"  # 面板已到上限，无需再续（正常）
+    UNKNOWN = "unknown"          # 操作已执行但读不到明确结果，需人工留意
     TRANSIENT = "transient"      # 上游故障（5xx / 连不上 / 超时），重试后仍失败 -> 不算脚本错
     FAILED = "failed"            # 真失败，需要人工介入
 
@@ -30,6 +31,7 @@ class Outcome(str, Enum):
             Outcome.RENEWED: "✅",
             Outcome.SKIPPED: "🟢",
             Outcome.ALREADY_MAX: "⏭️",
+            Outcome.UNKNOWN: "❓",
             Outcome.TRANSIENT: "🌐",
             Outcome.FAILED: "🚨",
         }[self]

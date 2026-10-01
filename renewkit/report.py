@@ -15,6 +15,12 @@ from .outcome import Outcome
 from .timeutil import days_left, format_expiry, is_day_count
 
 
+def shorten(text, limit: int = 60) -> str:
+    """压平换行 + 截短，避免通知被撑爆或排版乱。"""
+    s = " ".join((text or "").split())
+    return s if len(s) <= limit else s[: limit - 1] + "…"
+
+
 def _expiry_phrase(expire) -> str:
     """把到期信息说成人话：天数是「剩 N 天」，时间点是「MM-DD HH:MM 到期」。"""
     if expire in (None, "", 0):
@@ -54,6 +60,9 @@ class TargetResult:
         elif o is Outcome.TRANSIENT:
             l1 = f"{o.icon} {self.name} · 上游暂不可用{rem}"
             l2 = f"ℹ️ {self.detail or '面板故障/超时'} · 本次跳过，等下次排程"
+        elif o is Outcome.UNKNOWN:
+            l1 = f"{o.icon} {self.name} · 结果未确认{rem}"
+            l2 = f"ℹ️ {self.detail or '操作已执行但读不到明确提示'} · 请留意下次运行"
         elif o is Outcome.FAILED:
             l1 = f"{o.icon} {self.name} · 续期未完成{rem}"
             l2 = f"⚠️ {self.detail or '执行失败'} · 请登录面板手动处理"
@@ -86,7 +95,8 @@ class RenewReport:
 
     @property
     def worst(self) -> Outcome:
-        order = [Outcome.FAILED, Outcome.TRANSIENT, Outcome.RENEWED, Outcome.ALREADY_MAX, Outcome.SKIPPED]
+        order = [Outcome.FAILED, Outcome.TRANSIENT, Outcome.UNKNOWN,
+                 Outcome.RENEWED, Outcome.ALREADY_MAX, Outcome.SKIPPED]
         for o in order:
             if any(r.outcome is o for r in self.results):
                 return o

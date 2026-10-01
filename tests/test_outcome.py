@@ -3,8 +3,15 @@ from renewkit.outcome import Outcome, classify_status
 
 def test_only_failed_is_error():
     assert Outcome.FAILED.is_error is True
-    for o in (Outcome.RENEWED, Outcome.SKIPPED, Outcome.ALREADY_MAX, Outcome.TRANSIENT):
+    for o in (Outcome.RENEWED, Outcome.SKIPPED, Outcome.ALREADY_MAX,
+              Outcome.UNKNOWN, Outcome.TRANSIENT):
         assert o.is_error is False
+
+
+def test_unknown_is_not_error_but_distinct():
+    assert Outcome.UNKNOWN.exit_code == 0
+    assert Outcome.UNKNOWN.icon == "❓"
+    assert Outcome.UNKNOWN is not Outcome.SKIPPED
 
 
 def test_exit_codes():
