@@ -67,3 +67,29 @@ def test_shorten_flattens_and_truncates():
     from renewkit.report import shorten
     assert shorten("a\n  b\tc") == "a b c"
     assert shorten("x" * 100, limit=10) == "x" * 9 + "…"
+
+
+def test_custom_renderer_takes_over_output_but_keeps_exit_code():
+    """renderer 钩子：排版归调用方，结果语义/退出码仍归 renewkit。
+
+    用于那些已经手工调好通知格式的仓库（如 Aut0-Renew-B0th0sting02）。
+    """
+    def my_format(report):
+        return "MY-FORMAT:" + ",".join(r.outcome.value for r in report.results)
+
+    r = RenewReport("bot-hosting", renderer=my_format)
+    r.add("acct", Outcome.RENEWED)
+    r.add("acct2", Outcome.TRANSIENT)
+    assert r.render() == "MY-FORMAT:renewed,transient"
+    # 上游故障不算失败
+    assert r.exit_code == 0
+
+    r.add("acct3", Outcome.FAILED)
+    assert r.render() == "MY-FORMAT:renewed,transient,failed"
+    assert r.exit_code == 1
+
+
+def test_no_renderer_keeps_default_layout():
+    r = RenewReport("svc")
+    r.add("a", Outcome.RENEWED)
+    assert r.render().startswith("【svc】")

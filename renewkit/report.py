@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from . import notify
 from .outcome import Outcome
@@ -79,10 +79,16 @@ class TargetResult:
 
 @dataclass
 class RenewReport:
-    """一次运行的完整报告。"""
+    """一次运行的完整报告。
+
+    renderer：可选的自定义排版函数。传了就完全接管 render()，
+    用来兼容那些已经手工调好通知格式的仓库——它们只想借用 renewkit 的
+    结果语义与退出码，排版仍归自己。签名：``fn(report) -> str``。
+    """
 
     service: str
     results: list[TargetResult] = field(default_factory=list)
+    renderer: Callable[["RenewReport"], str] | None = None
 
     def add(self, name: str, outcome: Outcome, *, expire: Any = None, detail: str = "") -> TargetResult:
         r = TargetResult(name=name, outcome=outcome, expire=expire, detail=detail)
@@ -113,6 +119,8 @@ class RenewReport:
         return out
 
     def render(self) -> str:
+        if self.renderer is not None:
+            return self.renderer(self)
         if not self.results:
             return f"🟢 {self.service} · 检查完成（未发现服务器实例）"
         blocks = ["\n".join(r.lines()) for r in self.results]
