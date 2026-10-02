@@ -111,9 +111,55 @@ notify.send(
 配置读 `TG_BOT_TOKEN`/`TG_CHAT_ID`（也认 `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID`）。
 **没配置就打印一行日志返回 `False`，不抛异常。**
 
+## 报告排版
+
+每台服务器两行：一行结论 + 一行细节。
+
+```
+【Openworld VPS】
+🟢 Openworld e2ce269b · 状态良好（剩 12 天）
+ℹ️ 未到续期窗口
+
+🚨 Openworld e2ce269b · 续期未完成（剩 5 天）
+⚠️ 服务器状态：正常（Running） · 需人工過驗證碼 · 请登录面板手动处理
+```
+
+天数只出现一次（`（剩 N 天）` 在第一行），第二行不复读。
+
+需要**带内联按钮**的通知时，别用 `finish()`——它没有 `buttons` 参数。
+改成自己发：
+
+```python
+code = report.finish(notify_tg=False)      # 只打印 + 算退出码
+notify.send(text, parse_mode="HTML", buttons=buttons or None)
+```
+
+排版想完全自己来（保留历史通知格式），传 `renderer=`：
+
+```python
+RenewReport("svc", renderer=lambda r: my_format(r))
+```
+
+## 变更
+
+| 版本 | 内容 |
+|---|---|
+| v0.5.1 | `report`：`SKIPPED` 不再把天数复读两遍 |
+| v0.5.0 | `notify`：内联键盘按钮（`buttons=` / `build_keyboard()`） |
+| v0.4.2 | `action`：修 composite action 空 `then` 分支导致默认路径必挂 |
+| v0.4.1 | `report`：`shorten()` 兜住非字符串入参 |
+| v0.4.0 | 回灌 c10udcheckin 的两项通知能力 |
+| v0.3.0 | `RenewReport` 支持 `renderer` 自定义排版 |
+
 ## 开发
 
 ```bash
 pip install -e ".[dev]"
 pytest -q
+```
+
+本机没有第三方包时，用离线跑法（只依赖标准库）：
+
+```bash
+python .verify/run_tests_offline.py
 ```

@@ -45,8 +45,29 @@ def test_counts():
 def test_skipped_with_day_count_reads_naturally():
     """回归：renewal=27（剩余天数）不能渲染成「27 天后 到期」。"""
     lines = TargetResult("srv", Outcome.SKIPPED, expire=27).lines()
-    assert "剩 27 天" in lines[1]
+    assert "状态良好（剩 27 天）" in lines[0]
     assert "27 天后 到期" not in lines[1]
+
+
+def test_skipped_day_count_not_repeated_on_second_line():
+    """回归（v0.5.1）：天数只出现在第一行，第二行不再复读。
+
+    线上原本渲染成
+        🟢 srv · 状态良好（剩 12 天）
+        ℹ️ 剩 12 天 · 未到续期窗口
+    第一行已经说了天数，第二行再说一遍纯属噪音。
+    """
+    text = "\n".join(TargetResult("srv", Outcome.SKIPPED, expire=12).lines())
+    assert text.count("剩 12 天") == 1, text
+    assert text.endswith("ℹ️ 未到续期窗口"), text
+
+
+def test_skipped_detail_still_shown_after_day_count():
+    """去掉复读不能顺手把 detail 也吞掉。"""
+    lines = TargetResult("srv", Outcome.SKIPPED, expire=12,
+                         detail="伺服器已重啟").lines()
+    assert "剩 12 天" in lines[0]
+    assert lines[1] == "ℹ️ 伺服器已重啟"
 
 
 def test_skipped_with_timestamp_reads_as_date():

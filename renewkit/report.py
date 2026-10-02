@@ -75,7 +75,11 @@ class TargetResult:
             l1 = f"{o.icon} {self.name} · 状态良好{rem}"
             info = []
             phrase = _expiry_phrase(self.expire)
-            if phrase:
+            # l1 已经带了「（剩 N 天）」时 l2 再说一遍就是复读机：
+            #   🟢 srv · 状态良好（剩 12 天）
+            #   ℹ️ 剩 12 天 · 未到续期窗口      <- 这句纯噪音
+            # 只有 l1 没写天数（时间点型 expire）时才在 l2 补日期。
+            if phrase and phrase not in l1:
                 info.append(phrase)
             info.append(self.detail or "未到续期窗口")
             l2 = "ℹ️ " + " · ".join(info)
