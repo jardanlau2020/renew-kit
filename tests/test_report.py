@@ -1,3 +1,6 @@
+import contextlib
+import io
+
 from renewkit.outcome import Outcome
 from renewkit.report import RenewReport, TargetResult
 
@@ -123,3 +126,50 @@ def test_no_renderer_keeps_default_layout():
     r = RenewReport("svc")
     r.add("a", Outcome.RENEWED)
     assert r.render().startswith("【svc】")
+
+
+# ── finish() 与演练开关（v0.5.2） ───────────────────────────────────
+
+
+def _forbid_network(monkeypatch):
+    from renewkit import notify
+
+    def boom(req, timeout=None):
+        raise AssertionError(f"演练模式竟然发了请求: {req.full_url}")
+
+    monkeypatch.setattr(notify.urllib.request, "urlopen", boom)
+
+
+def test_finish_returns_exit_code_without_sending(monkeypatch):
+    """notify_tg=False 时只打印，不碰网络。"""
+    _forbid_network(monkeypatch)
+    r = RenewReport("svc")
+    r.add("a", Outcome.RENEWED, expire=30)
+    assert r.finish(notify_tg=False) == 0
+    assert r.exit_code == 0
+
+    r2 = RenewReport("svc")
+    r2.add("a", Outcome.FAILED, detail="x")
+    assert r2.finish(notify_tg=False) == 1
+
+
+def test_finish_honours_dry_run(monkeypatch):
+    """回归：DRY_RUN=1 时 finish() 不能真发 TG。
+
+    kit 里 env.dry_run() 原本是没人调用的死代码，RenewReport.finish() 走
+    notify.send() 会绕过各仓库自己抄的演练闸门 —— 演练把真通知发出去。
+    闸门收进 notify.send() 之后这条路径才被真正覆盖。
+    """
+    monkeypatch.setenv("TG_BOT_TOKEN", "TOKEN")
+    monkeypatch.setenv("TG_CHAT_ID", "123")
+    monkeypatch.setenv("DRY_RUN", "1")
+    _forbid_network(monkeypatch)
+
+    r = RenewReport("svc")
+    r.add("a", Outcome.FAILED, expire=5, detail="需人工")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        assert r.finish() == 1      # 演练不影响退出码
+    out = buf.getvalue()
+    assert "DRY_RUN" in out
+    assert "续期未完成" in out        # 报告本体照打印

@@ -7,6 +7,8 @@
     send("<b>富文本</b>", parse_mode="HTML")
     send("点下面去续期", parse_mode="HTML",
          buttons=[{"text": "🔓 去續期", "url": "https://..."}])
+
+DRY_RUN=1（renewkit.env 的真值集合）时只打印不发送，见 send()。
 """
 from __future__ import annotations
 
@@ -79,13 +81,32 @@ def send(
     用 POST 发送而非把参数拼进 URL——带 HTML tag 的长消息走 GET 容易撞
     URL 长度上限，被 Telegram 以 414 拒掉。reply_markup 是一串 JSON，
     同样只能走 body。
+
+    DRY_RUN 演练：闸门设在这里（唯一一处），内容照打印、一个字节都不发出去。
+    RenewReport.finish() 也走这个函数，所以演练开关对所有调用方自动生效。
     """
     token, chat_id = config()
+    if len(text) > MESSAGE_LIMIT:
+        text = text[: MESSAGE_LIMIT - len(TRUNCATION_SUFFIX)] + TRUNCATION_SUFFIX
+
+    rows = build_keyboard(buttons)
+
+    # 演练闸门必须放在最前面，而且只放这一处。
+    # 各仓库原先各自抄一遍 `if DRY_RUN: print(...) else: send(...)`，抄漏一个
+    # 就是「演练把真通知发出去了」——而 kit 自己的 env.dry_run() 在此之前根本
+    # 没人调用（死代码），RenewReport.finish() 在 DRY_RUN=1 下照样真发。
+    if env.dry_run():
+        print("ℹ️ DRY_RUN 演练，跳过 Telegram 通知。本轮本应发送：", flush=True)
+        print(text, flush=True)
+        if rows:
+            print("   内联按钮: " + json.dumps(rows, ensure_ascii=False), flush=True)
+        if not token or not chat_id:
+            print("   （注：TG_BOT_TOKEN / TG_CHAT_ID 未配置，实跑时也发不出去）", flush=True)
+        return False
+
     if not token or not chat_id:
         print("Telegram 未配置（TG_BOT_TOKEN / TG_CHAT_ID），跳过通知", flush=True)
         return False
-    if len(text) > MESSAGE_LIMIT:
-        text = text[: MESSAGE_LIMIT - len(TRUNCATION_SUFFIX)] + TRUNCATION_SUFFIX
 
     payload = {
         "chat_id": chat_id,
@@ -95,7 +116,6 @@ def send(
     if parse_mode:
         payload["parse_mode"] = parse_mode
 
-    rows = build_keyboard(buttons)
     if rows:
         payload["reply_markup"] = json.dumps(
             {"inline_keyboard": rows}, ensure_ascii=False

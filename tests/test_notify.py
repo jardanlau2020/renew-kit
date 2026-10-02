@@ -1,4 +1,6 @@
 """notify 模块测试：不发真请求，靠 monkeypatch urlopen。"""
+import contextlib
+import io
 import json
 import urllib.parse
 
@@ -26,6 +28,9 @@ class FakeResp:
 def tg_env(monkeypatch):
     monkeypatch.setenv("TG_BOT_TOKEN", "TOKEN")
     monkeypatch.setenv("TG_CHAT_ID", "123")
+    # DRY_RUN 会短路掉整个发送路径 —— 不显式清掉的话，跑测试的机器上只要有
+    # DRY_RUN=1（CI 演练场景很常见），一大半用例会莫名其妙地失败。
+    monkeypatch.delenv("DRY_RUN", raising=False)
 
 
 def _capture(monkeypatch, resp):
@@ -42,6 +47,7 @@ def _capture(monkeypatch, resp):
 
 
 def test_missing_config_returns_false_and_does_not_raise(monkeypatch):
+    monkeypatch.delenv("DRY_RUN", raising=False)
     monkeypatch.delenv("TG_BOT_TOKEN", raising=False)
     monkeypatch.delenv("TG_CHAT_ID", raising=False)
     monkeypatch.delenv("TELEGRAM_TOKEN", raising=False)
@@ -180,4 +186,91 @@ def test_build_keyboard_does_not_mutate_input():
     rows = notify.build_keyboard(src)
     rows[0][0]["text"] = "MUTATED"
     assert src[0]["text"] == "A"
+
+
+# ── DRY_RUN 演练（v0.5.2） ───────────────────────────────────────────
+#
+# 这里刻意不用 capsys / parametrize：.verify/run_tests_offline.py 是个最小
+# 替身 runner（给没装 pytest 的 Windows 环境兜底），只认 monkeypatch 和
+# 简单 fixture。自带一个捕获上下文就能两边都跑。
+
+
+@contextlib.contextmanager
+def _stdout():
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        yield buf
+
+
+def _forbid_network(monkeypatch):
+    """任何网络访问都算失败：演练模式下一个字节都不该发出去。"""
+
+    def boom(req, timeout=None):
+        raise AssertionError(f"演练模式竟然发了请求: {req.full_url}")
+
+    monkeypatch.setattr(notify.urllib.request, "urlopen", boom)
+
+
+def test_dry_run_prints_preview_and_sends_nothing(tg_env, monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    _forbid_network(monkeypatch)
+
+    with _stdout() as buf:
+        assert notify.send("hello dry") is False
+    out = buf.getvalue()
+    assert "DRY_RUN" in out
+    assert "hello dry" in out
+
+
+def test_dry_run_truthy_variants_gate_sending(tg_env, monkeypatch):
+    _forbid_network(monkeypatch)
+    for value in ("1", "true", "TRUE", "yes", "on", "y"):
+        monkeypatch.setenv("DRY_RUN", value)
+        with _stdout() as buf:
+            notify.send("x")
+        assert "DRY_RUN" in buf.getvalue(), f"DRY_RUN={value!r} 没被当成真值"
+
+
+def test_falsy_dry_run_still_sends(tg_env, monkeypatch):
+    for value in ("", "0", "false", "no", "off"):
+        monkeypatch.setenv("DRY_RUN", value)
+        box = _capture(monkeypatch, FakeResp())
+        assert notify.send("real") is True, f"DRY_RUN={value!r} 不该拦发送"
+        assert box["req"].full_url.endswith("/sendMessage")
+
+
+def test_dry_run_previews_inline_buttons(tg_env, monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "1")
+    _forbid_network(monkeypatch)
+    with _stdout() as buf:
+        notify.send("去续期", buttons=[{"text": "🔓 去續期", "url": "https://a"}])
+    out = buf.getvalue()
+    assert "内联按钮" in out
+    assert "🔓 去續期" in out
+    assert "https://a" in out
+
+
+def test_dry_run_preview_is_truncated_like_the_real_thing(tg_env, monkeypatch):
+    """预览要是原样打全文，就失去「看到的就是会发出去的那条」的意义。"""
+    monkeypatch.setenv("DRY_RUN", "1")
+    _forbid_network(monkeypatch)
+    with _stdout() as buf:
+        notify.send("z" * (notify.MESSAGE_LIMIT + 500))
+    out = buf.getvalue()
+    assert notify.TRUNCATION_SUFFIX in out
+    assert len(out) < notify.MESSAGE_LIMIT + 200
+
+
+def test_dry_run_without_config_still_previews(monkeypatch):
+    """演练 + 没配 TG：仍要把内容打出来，方便无 secret 的 CI 验排版。"""
+    monkeypatch.setenv("DRY_RUN", "1")
+    for name in ("TG_BOT_TOKEN", "TG_CHAT_ID", "TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"):
+        monkeypatch.delenv(name, raising=False)
+    _forbid_network(monkeypatch)
+
+    with _stdout() as buf:
+        assert notify.send("预览我") is False
+    out = buf.getvalue()
+    assert "预览我" in out
+    assert "未配置" in out
 

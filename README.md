@@ -111,6 +111,25 @@ notify.send(
 配置读 `TG_BOT_TOKEN`/`TG_CHAT_ID`（也认 `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID`）。
 **没配置就打印一行日志返回 `False`，不抛异常。**
 
+### 演练：`DRY_RUN=1`
+
+闸门在 `notify.send()` 里，**只有这一处**——所以 `RenewReport.finish()` 也自动
+跟着生效。演练时内容照打印（含内联按钮的 JSON），一个字节都不发出去：
+
+```
+ℹ️ DRY_RUN 演练，跳过 Telegram 通知。本轮本应发送：
+🚨 Openworld e2ce269b · 续期未完成（剩 5 天）
+⚠️ 需人工過驗證碼 · 请登录面板手动处理
+   内联按钮: [[{"text": "🔓 去續期", "url": "https://..."}]]
+```
+
+返回值仍是 `False`（确实没发出去），退出码不受影响。演练 + 没配 TG 也能看到预览，
+方便在没有 secret 的 CI 上验排版。
+
+> 为什么收进 `notify`：各仓库原先各抄一遍 `if DRY_RUN: print(...) else: send(...)`，
+> 抄漏一处就是「演练把真通知发出去了」。而 kit 自己的 `env.dry_run()` 在此之前
+> 根本没被调用过（死代码），`finish()` 走 `notify.send()` 直接绕过了所有闸门。
+
 ## 报告排版
 
 每台服务器两行：一行结论 + 一行细节。
@@ -144,6 +163,7 @@ RenewReport("svc", renderer=lambda r: my_format(r))
 
 | 版本 | 内容 |
 |---|---|
+| v0.5.2 | `notify`：`DRY_RUN` 演练闸门收口（原先 `env.dry_run()` 是死代码，`finish()` 在演练下照样真发） |
 | v0.5.1 | `report`：`SKIPPED` 不再把天数复读两遍 |
 | v0.5.0 | `notify`：内联键盘按钮（`buttons=` / `build_keyboard()`） |
 | v0.4.2 | `action`：修 composite action 空 `then` 分支导致默认路径必挂 |
