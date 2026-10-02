@@ -16,8 +16,13 @@ from .timeutil import days_left, format_expiry, is_day_count
 
 
 def shorten(text, limit: int = 60) -> str:
-    """压平换行 + 截短，避免通知被撑爆或排版乱。"""
-    s = " ".join((text or "").split())
+    """压平换行 + 截短，避免通知被撑爆或排版乱。
+
+    入参不假定是 str：``shorten(exc)`` 是最常见的误用（在 except 块里
+    直接把异常丢进来），而这里要是再抛 AttributeError，就会在异常处理路径上
+    二次崩掉 —— 连报告和通知都发不出去。统一 str() 兜住。
+    """
+    s = " ".join(str(text or "").split())
     return s if len(s) <= limit else s[: limit - 1] + "…"
 
 

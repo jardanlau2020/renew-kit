@@ -69,6 +69,15 @@ def test_shorten_flattens_and_truncates():
     assert shorten("x" * 100, limit=10) == "x" * 9 + "…"
 
 
+def test_shorten_accepts_non_str():
+    """回归：在 except 块里写 shorten(exc) 曾在异常处理路径上二次抛
+    AttributeError，导致报告和 TG 都发不出去。"""
+    from renewkit.report import shorten
+    assert shorten(RuntimeError("chrome not found")) == "chrome not found"
+    assert shorten(None) == ""
+    assert shorten(123) == "123"
+
+
 def test_custom_renderer_takes_over_output_but_keeps_exit_code():
     """renderer 钩子：排版归调用方，结果语义/退出码仍归 renewkit。
 
