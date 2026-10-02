@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from . import notify
+from . import env, notify
 from .outcome import Outcome
 from .timeutil import days_left, format_expiry, is_day_count
 
@@ -143,7 +143,10 @@ class RenewReport:
     def finish(self, *, notify_tg: bool = True, print_report: bool = True) -> int:
         """渲染 + 打印 + 发 TG + 返回退出码。"""
         text = self.render()
-        if print_report:
+        # 演练时 notify.send() 会把「本轮本应发送」的原文整条打出来 —— 那就是
+        # 这份报告本身。这里再打一遍等于同一段字出现两次，所以让位给它。
+        # 注意 notify_tg=False 时 notify 根本没被调用，日志里那份得留着。
+        if print_report and not (notify_tg and env.dry_run()):
             print(text, flush=True)
         if notify_tg:
             notify.send(text)

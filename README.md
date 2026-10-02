@@ -163,6 +163,7 @@ RenewReport("svc", renderer=lambda r: my_format(r))
 
 | 版本 | 内容 |
 |---|---|
+| v0.5.3 | `report`：演练时 `finish()` 不再把报告打两遍（预览就是那份报告） |
 | v0.5.2 | `notify`：`DRY_RUN` 演练闸门收口（原先 `env.dry_run()` 是死代码，`finish()` 在演练下照样真发） |
 | v0.5.1 | `report`：`SKIPPED` 不再把天数复读两遍 |
 | v0.5.0 | `notify`：内联键盘按钮（`buttons=` / `build_keyboard()`） |

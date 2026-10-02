@@ -173,3 +173,31 @@ def test_finish_honours_dry_run(monkeypatch):
     out = buf.getvalue()
     assert "DRY_RUN" in out
     assert "续期未完成" in out        # 报告本体照打印
+
+
+def test_finish_dry_run_prints_report_only_once(monkeypatch):
+    """演练预览就是那份报告，日志里不该再重复一遍。"""
+    monkeypatch.setenv("TG_BOT_TOKEN", "TOKEN")
+    monkeypatch.setenv("TG_CHAT_ID", "123")
+    monkeypatch.setenv("DRY_RUN", "1")
+    _forbid_network(monkeypatch)
+
+    r = RenewReport("svc")
+    r.add("a", Outcome.RENEWED, expire=30)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        r.finish()
+    assert buf.getvalue().count("成功续期") == 1
+
+
+def test_finish_with_notify_tg_false_still_prints_under_dry_run(monkeypatch):
+    """notify_tg=False 时 notify 根本没被调用，日志里那份必须留着。"""
+    monkeypatch.setenv("DRY_RUN", "1")
+    _forbid_network(monkeypatch)
+
+    r = RenewReport("svc")
+    r.add("a", Outcome.RENEWED, expire=30)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        assert r.finish(notify_tg=False) == 0
+    assert "成功续期" in buf.getvalue()
