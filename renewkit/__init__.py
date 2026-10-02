@@ -17,7 +17,7 @@ from .http import summarize_http_failure
 from .outcome import Outcome, classify_status
 from .report import RenewReport, TargetResult, shorten
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 __all__ = [
     "Outcome",

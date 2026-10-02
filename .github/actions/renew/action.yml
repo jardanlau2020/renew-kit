@@ -143,12 +143,23 @@ runs:
     - name: Run renewal script
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      # 值走 env 而不是拼进脚本正文：一是避免空值把 then 分支掏空（见下），
+      # 二是调用方的命令不用再操心引号/转义 —— 脚本正文里已经没有任何插值了。
+      env:
+        RENEW_SCRIPT: ${{ inputs.script }}
+        RENEW_COMMAND: ${{ inputs.command }}
       run: |
         set -uo pipefail
-        if [ -n "${{ inputs.command }}" ]; then
-          ${{ inputs.command }}
+        # 注意：不能写成「if 判 RENEW_COMMAND 非空 → then 分支直接放插值 →
+        # 紧跟 else」。command 默认是空串，then 分支会被掏空，而 POSIX 要求
+        # then 之后至少有一条命令 —— bash 直接报
+        # "syntax error near unexpected token `else'" 并以 exit 2 收场，
+        # 也就是「不传 command 的调用方一律跑不起来」。
+        # 现在 then 分支里始终有 eval 这条命令，两种取值都合法。
+        if [ -n "$RENEW_COMMAND" ]; then
+          eval "$RENEW_COMMAND"
         else
-          python "${{ inputs.script }}"
+          python "$RENEW_SCRIPT"
         fi
 
     - name: Upload failure artifacts
