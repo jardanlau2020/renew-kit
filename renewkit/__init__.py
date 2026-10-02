@@ -5,7 +5,7 @@
     · http       带退避重试的 Session，区分「上游故障」与「真失败」
     · outcome    统一的结果分类（成功/跳过/已满/结果未确认/上游故障/真失败）
     · timeutil   面板到期时间的各种格式解析
-    · notify     Telegram 通知（失败不影响 job 结论；支持 HTML parse_mode）
+    · notify     Telegram 通知（失败不影响 job 结论；HTML parse_mode + 内联键盘）
     · report     统一的中文报告排版与退出码（可传 renderer 保留自家排版）
 
 设计原则：
@@ -17,7 +17,7 @@ from .http import summarize_http_failure
 from .outcome import Outcome, classify_status
 from .report import RenewReport, TargetResult, shorten
 
-__version__ = "0.4.2"
+__version__ = "0.5.0"
 
 __all__ = [
     "Outcome",

@@ -15,7 +15,7 @@
 | `renewkit.http` | 带退避重试的 `Session`；只重试连接失败 / 超时 / 5xx / 429 |
 | `renewkit.outcome` | 统一结果分类：`RENEWED` / `SKIPPED` / `ALREADY_MAX` / `TRANSIENT` / `FAILED` |
 | `renewkit.timeutil` | 面板 `renewal` 字段的各种格式解析（天数 / 秒 / 毫秒 / ISO） |
-| `renewkit.notify` | Telegram 通知；**失败不影响 job 结论** |
+| `renewkit.notify` | Telegram 通知；HTML 富文本 + **内联键盘按钮**；**失败不影响 job 结论** |
 | `renewkit.report` | 统一中文报告排版与退出码 |
 
 ## 核心原则
@@ -78,6 +78,38 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
 ```
+
+## 通知
+
+```python
+from renewkit import notify
+
+notify.send("纯文本")
+notify.send("<b>续期成功</b>", parse_mode="HTML")
+
+# 内联键盘：扁平 list = 一行
+notify.send(
+    "🔓 检测到 VPS 需要人工续期",
+    parse_mode="HTML",
+    buttons=[{"text": "去續期", "url": "https://panel.example.com/vps/1"}],
+)
+
+# 也可以显式分行
+notify.send(
+    "选择操作",
+    buttons=[
+        [{"text": "续期", "url": "https://a"}],
+        [{"text": "面板", "url": "https://b"}, {"text": "文档", "url": "https://c"}],
+    ],
+)
+```
+
+按钮 dict 直接透传 Telegram 的 schema，`url` / `callback_data` / `web_app` 都能用。
+缺 `text` 的按钮会被丢掉——Telegram 对无 text 的按钮一律 400，宁可少一个按钮，
+也不要整条通知发不出去。
+
+配置读 `TG_BOT_TOKEN`/`TG_CHAT_ID`（也认 `TELEGRAM_TOKEN`/`TELEGRAM_CHAT_ID`）。
+**没配置就打印一行日志返回 `False`，不抛异常。**
 
 ## 开发
 

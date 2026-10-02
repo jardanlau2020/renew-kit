@@ -92,3 +92,92 @@ def test_send_returns_false_on_network_exception(tg_env, monkeypatch):
 
     monkeypatch.setattr(notify.urllib.request, "urlopen", boom)
     assert notify.send("x") is False
+
+
+# ── 内联键盘（v0.5.0） ────────────────────────────────────────────────
+
+
+def _fields(box):
+    return urllib.parse.parse_qs(box["req"].data.decode())
+
+
+def test_send_without_buttons_has_no_reply_markup(tg_env, monkeypatch):
+    box = _capture(monkeypatch, FakeResp())
+    notify.send("x")
+    assert "reply_markup" not in _fields(box)
+
+
+def test_send_flat_buttons_become_one_row(tg_env, monkeypatch):
+    box = _capture(monkeypatch, FakeResp())
+    buttons = [
+        {"text": "🔓 去續期", "url": "https://openworld.eu.org/x"},
+        {"text": "📄 面板", "url": "https://openworld.eu.org/p"},
+    ]
+    assert notify.send("去续期", buttons=buttons) is True
+
+    markup = json.loads(_fields(box)["reply_markup"][0])
+    assert markup == {"inline_keyboard": [buttons]}
+
+
+def test_send_nested_buttons_keep_rows(tg_env, monkeypatch):
+    box = _capture(monkeypatch, FakeResp())
+    rows = [
+        [{"text": "A", "url": "https://a"}],
+        [{"text": "B", "url": "https://b"}, {"text": "C", "url": "https://c"}],
+    ]
+    notify.send("x", buttons=rows)
+    markup = json.loads(_fields(box)["reply_markup"][0])
+    assert markup["inline_keyboard"] == rows
+
+
+def test_send_buttons_and_parse_mode_coexist(tg_env, monkeypatch):
+    box = _capture(monkeypatch, FakeResp())
+    notify.send("<b>hi</b>", parse_mode="HTML",
+                buttons=[{"text": "T", "url": "https://t"}])
+    fields = _fields(box)
+    assert fields["parse_mode"] == ["HTML"]
+    assert fields["text"] == ["<b>hi</b>"]
+    markup = json.loads(fields["reply_markup"][0])
+    assert markup["inline_keyboard"] == [[{"text": "T", "url": "https://t"}]]
+
+
+def test_send_buttons_keep_non_ascii_readable(tg_env, monkeypatch):
+    """ensure_ascii=False：URL 里带中文/emoji 也别被转成 \\uXXXX 一堆。"""
+    box = _capture(monkeypatch, FakeResp())
+    notify.send("x", buttons=[{"text": "🔓 去續期", "url": "https://a"}])
+    raw = _fields(box)["reply_markup"][0]
+    assert "🔓" in raw
+    assert "\\u" not in raw
+
+
+def test_send_empty_buttons_ignored(tg_env, monkeypatch):
+    box = _capture(monkeypatch, FakeResp())
+    notify.send("x", buttons=[])
+    assert "reply_markup" not in _fields(box)
+
+
+def test_send_drops_button_without_text(tg_env, monkeypatch):
+    """缺 text 的按钮会被 Telegram 400 掉，宁可丢掉它也别让整条通知发不出去。"""
+    box = _capture(monkeypatch, FakeResp())
+    notify.send("x", buttons=[{"url": "https://no-text"}, {"text": "OK", "url": "https://ok"}])
+    markup = json.loads(_fields(box)["reply_markup"][0])
+    assert markup["inline_keyboard"] == [[{"text": "OK", "url": "https://ok"}]]
+
+
+def test_send_all_buttons_invalid_omits_markup(tg_env, monkeypatch):
+    box = _capture(monkeypatch, FakeResp())
+    notify.send("x", buttons=[{"url": "https://a"}, "not-a-dict"])
+    assert "reply_markup" not in _fields(box)
+
+
+def test_build_keyboard_falsy_returns_empty():
+    assert notify.build_keyboard(None) == []
+    assert notify.build_keyboard([]) == []
+
+
+def test_build_keyboard_does_not_mutate_input():
+    src = [{"text": "A", "url": "https://a"}]
+    rows = notify.build_keyboard(src)
+    rows[0][0]["text"] = "MUTATED"
+    assert src[0]["text"] == "A"
+
