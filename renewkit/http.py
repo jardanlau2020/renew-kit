@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import html
+import re
 import time
 from typing import Iterable, Sequence
 
@@ -95,3 +97,33 @@ def classify(response: requests.Response) -> Outcome:
     return Outcome.TRANSIENT if response.status_code in TRANSIENT_STATUS else (
         Outcome.RENEWED if response.status_code in (200, 201, 204) else Outcome.FAILED
     )
+
+
+#: HTTP 失败摘要里正文的截断长度
+HTTP_ERROR_DETAIL_LIMIT = 240
+
+_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+
+
+def summarize_http_failure(status_code, response_text) -> str:
+    """把一次 HTTP 失败的响应压成一行摘要，适合直接塞进通知。
+
+    面板/网关 5xx 经常返回整页 HTML（Cloudflare 的 "Just a moment..."、
+    nginx 的 502 页面）。原样发出去会把通知撑爆、也看不出所以然，
+    这里只取 ``<title>``；实在没有就退回纯文本并截断。
+    """
+    text = str(response_text or "").strip()
+
+    title = _TITLE_RE.search(text)
+    if title:
+        detail = re.sub(r"\s+", " ", html.unescape(title.group(1))).strip()
+    elif text.startswith("<"):
+        detail = "HTML 错误页（无 title）"
+    else:
+        detail = re.sub(r"\s+", " ", text).strip()
+
+    if len(detail) > HTTP_ERROR_DETAIL_LIMIT:
+        detail = detail[: HTTP_ERROR_DETAIL_LIMIT - 3].rstrip() + "..."
+
+    summary = f"HTTP {status_code}"
+    return f"{summary}: {detail}" if detail else summary

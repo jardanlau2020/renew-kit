@@ -65,3 +65,45 @@ def test_404_is_not_retried():
 def test_build_session_has_default_ua():
     s = build_session()
     assert "Mozilla" in s.headers["User-Agent"]
+
+
+# ── summarize_http_failure ────────────────────────────────────────────────
+
+def test_summarize_extracts_title_from_html_error_page():
+    """CF / nginx 的整页 HTML 只留 <title>，不要把通知撑爆。"""
+    from renewkit.http import summarize_http_failure
+    page = ("<!DOCTYPE html><html><head><title>502 Bad Gateway</title></head>"
+            "<body><h1>502 Bad Gateway</h1>" + "<p>x</p>" * 500 + "</body></html>")
+    out = summarize_http_failure(502, page)
+    assert out == "HTTP 502: 502 Bad Gateway"
+    assert len(out) < 60
+
+
+def test_summarize_unescapes_and_collapses_title():
+    from renewkit.http import summarize_http_failure
+    page = "<html><title>Just a moment... &amp; more\n  text</title></html>"
+    assert summarize_http_failure(403, page) == "HTTP 403: Just a moment... & more text"
+
+
+def test_summarize_plain_text_body():
+    from renewkit.http import summarize_http_failure
+    assert summarize_http_failure(500, "  boom\n\n  happened ") == "HTTP 500: boom happened"
+
+
+def test_summarize_html_without_title():
+    from renewkit.http import summarize_http_failure
+    assert summarize_http_failure(522, "<html><body>oops</body></html>") == \
+        "HTTP 522: HTML 错误页（无 title）"
+
+
+def test_summarize_empty_body_returns_status_only():
+    from renewkit.http import summarize_http_failure
+    assert summarize_http_failure(503, "") == "HTTP 503"
+    assert summarize_http_failure(503, None) == "HTTP 503"
+
+
+def test_summarize_truncates_long_body():
+    from renewkit.http import HTTP_ERROR_DETAIL_LIMIT, summarize_http_failure
+    out = summarize_http_failure(500, "A" * 5000)
+    assert len(out) <= len("HTTP 500: ") + HTTP_ERROR_DETAIL_LIMIT
+    assert out.endswith("...")
