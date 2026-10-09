@@ -8,7 +8,7 @@ from __future__ import annotations
 import html
 import re
 import time
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -68,7 +68,7 @@ def request(
     重试耗尽仍失败时抛 :class:`TransientError`。
     非临时性状态码（4xx 除 429）直接返回 Response，交给调用方判断。
     """
-    waits: Iterable[int] = list(backoff) + [None]  # 最后一次不再等待
+    waits: list[int | None] = list(backoff) + [None]  # 最后一次不再等待
     last_code = 0
     last_exc: Exception | None = None
 

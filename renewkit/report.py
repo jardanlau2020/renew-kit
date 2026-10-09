@@ -56,7 +56,8 @@ class TargetResult:
 
         if o is Outcome.RENEWED:
             l1 = f"{o.icon} {self.name} · 成功续期" + (f"至 {exp}" if exp else "")
-            parts = [f"剩余 {days_left(self.expire)} 天"] if days_left(self.expire) is not None else []
+            _d = days_left(self.expire)
+            parts = [f"剩余 {_d} 天"] if _d is not None else []
             parts.append("服务已自动展期")
             l2 = "ℹ️ " + " · ".join(parts)
         elif o is Outcome.ALREADY_MAX:

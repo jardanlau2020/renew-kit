@@ -33,7 +33,7 @@ def is_day_count(value) -> bool:
 
 def _to_epoch(value) -> float | None:
     """把各种格式归一成 UTC epoch 秒；无法判断返回 None。"""
-    if value in (None, "", 0):
+    if value is None or value == "":
         return None
     try:
         n = float(value)
@@ -55,7 +55,7 @@ def _to_epoch(value) -> float | None:
 
 def days_left(value, *, now: float | None = None) -> int | None:
     """返回剩余天数（int）；无法判断返回 None（保守：不触发补点）。"""
-    if value in (None, "", 0):
+    if value is None or value == "":
         return None
     now = time.time() if now is None else now
     try:
@@ -75,7 +75,7 @@ def days_left(value, *, now: float | None = None) -> int | None:
 
 def format_expiry(value, *, tz: timezone = BEIJING) -> str:
     """格式化成 MM-DD HH:MM 或 MM-DD；无法解析时原样返回前 19 字符。"""
-    if value in (None, "", 0):
+    if value is None or value == "":
         return ""
     try:
         n = float(value)
