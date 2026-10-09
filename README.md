@@ -184,3 +184,51 @@ pytest -q
 ```bash
 python .verify/run_tests_offline.py
 ```
+
+## 工具：`tools/shield_probe.py` —— 反機械人牆只讀探針
+
+**問題**：某站續期卡喺 Cloudflare Turnstile / CF 挑戰，係「出口 IP 唔乾淨」定「腳本環境被偵測」？
+換節點試成本高（要等續期窗口開）。
+
+**做法**：攞站方**自己嘅 sitekey**，喺站方**自己嘅 domain** 上 render 個 Turnstile 部件，
+只觀察、唔登入、唔提交、唔碰續期狀態。所以**唔使等窗口**都測得。
+
+```bash
+# 直連（本機出口）
+xvfb-run -a python3 tools/shield_probe.py --url https://fridaydev.fr/ \
+    --sitekey 0x4AAAAAAEx3baDVK5SCuNmh --wait 40
+
+# 經現成 SOCKS5（例如 setup_proxy.sh 起好嘅）
+xvfb-run -a python3 tools/shield_probe.py --url https://fridaydev.fr/ \
+    --sitekey 0x4AAAAAAEx3baDVK5SCuNmh --proxy socks5://127.0.0.1:1080 --wait 40
+
+# 量度「撳落去過唔過得到」（靜觀 25 秒先撳，太早撳會即刻判敗；最多撳 3 次）
+xvfb-run -a python3 tools/shield_probe.py --url https://fridaydev.fr/ \
+    --sitekey 0x4AAAAAAEx3baDVK5SCuNmh --click --click-after 25 --wait 95
+```
+
+判詞：`TURNSTILE_PASS`（自動發 token＝出口／環境 OK）、`TURNSTILE_PENDING`、
+`TURNSTILE_FAILED`（站方判定失敗）、`CF_CHALLENGE`、`BLOCKED`、`NO_WIDGET`。
+
+### ⚠️ 先驗探針，再信結論
+
+用官方 dummy sitekey 做機械驗證（同一個 page／browser／出口）：
+
+| dummy sitekey | 應該 |
+|---|---|
+| `1x00000000000000000000AA` | ✅ 必定通過（數秒內出 token）|
+| `2x00000000000000000000AB` | ❌ 必定失敗 |
+| `3x00000000000000000000FF` | 強制互動式挑戰 |
+
+**如果 `1x…AA` 都攞唔到 token，係探針壞，唔係站方擋你。**
+
+### 2026-10-09 實測結論（FridayDev / Orihost）
+
+| 出口 | FridayDev 真 key | 同頁 `1x…AA` |
+|---|---|---|
+| 本機機房（SG）| ❌ error-callback | ✅ 5.1s 出 token |
+| 節點機房（HK／AE）| ❌ 同款 | — |
+| 🏠 **住宅家寬（HK HKT PCCW）** | ❌ **一樣判敗** | ✅ 出 token |
+
+⇒ **瓶頸唔係出口 IP**（住宅家寬都一樣敗），而係站方 Turnstile 對
+**自動化瀏覽器環境**嘅判定。換節點解決唔到，唔使再搵節點。
