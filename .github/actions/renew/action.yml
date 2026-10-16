@@ -176,6 +176,15 @@ runs:
       shell: bash
       run: |
         set -uo pipefail
+        # 腳本自己已經發過 TG（例如 watchdog 特意標紅叫人手撳）就唔好再兜底 ——
+        # 否則會多發一條誤導訊息「脚本异常退出」（實證 orihost run 38915537808：
+        # 腳本已發「🔔 已進入續期窗口，請人手撳」，用戶仍收到「脚本异常退出」）。
+        # 兜底嘅本意係接住「死得無聲」嗰種，唔係搶先報錯。腳本側寫法見
+        # orihost-renew/app.py::_mark_notified()（寫 RENEW_NOTIFIED=1 落 $GITHUB_ENV）。
+        if [ "${RENEW_NOTIFIED:-0}" = "1" ]; then
+          echo "腳本已自行發 TG（RENEW_NOTIFIED=1）→ 跳過兜底，避免重複／誤導訊息"
+          exit 0
+        fi
         TOKEN="${TG_BOT_TOKEN:-${TELEGRAM_TOKEN:-}}"
         CHAT="${TG_CHAT_ID:-${TELEGRAM_CHAT_ID:-}}"
         if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then
