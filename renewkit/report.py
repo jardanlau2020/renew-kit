@@ -2,7 +2,7 @@
 
 每个仓库原先各写一份中文排版逻辑，这里收成一处：
     · 每台服务器两行：一行结论 + 一行细节
-    · 只有 FAILED 会让 job 标红
+    · 只有「确定性的坏结果」会让 job 标红（FAILED / NOT_ADVANCED / NO_TARGET）
     · 收尾时发 TG 并返回进程退出码
 """
 from __future__ import annotations
@@ -13,6 +13,9 @@ from typing import Any, Callable
 from . import env, notify
 from .outcome import Outcome
 from .timeutil import days_left, format_expiry, is_day_count
+
+#: 报告结尾「需要人工处理」要数的结果种类（与 Outcome.is_error 保持一致）
+_BAD_KEYS = frozenset(o.value for o in Outcome if o.is_error)
 
 
 def shorten(text, limit: int = 60) -> str:
@@ -69,6 +72,12 @@ class TargetResult:
         elif o is Outcome.UNKNOWN:
             l1 = f"{o.icon} {self.name} · 结果未确认{rem}"
             l2 = f"ℹ️ {self.detail or '操作已执行但读不到明确提示'} · 请留意下次运行"
+        elif o is Outcome.NOT_ADVANCED:
+            l1 = f"{o.icon} {self.name} · 到期日未推进{rem}"
+            l2 = f"⚠️ {self.detail or '点过续期，剩余天数没有变化'} · 属假绿，请人工确认"
+        elif o is Outcome.NO_TARGET:
+            l1 = f"{o.icon} {self.name} · 无续期对象"
+            l2 = f"⚠️ {self.detail or '登录成功，但账号下 0 个服务'} · 确认是否该停用本仓"
         elif o is Outcome.FAILED:
             l1 = f"{o.icon} {self.name} · 续期未完成{rem}"
             l2 = f"⚠️ {self.detail or '执行失败'} · 请登录面板手动处理"
@@ -111,7 +120,13 @@ class RenewReport:
 
     @property
     def worst(self) -> Outcome:
-        order = [Outcome.FAILED, Outcome.TRANSIENT, Outcome.UNKNOWN,
+        """最坏的那个结果 —— 按「多值得半夜叫人手起来看」排。
+
+        顺序不能只看枚举定义：NOT_ADVANCED（续期没推进）和 NO_TARGET（一个
+        可续对象都没有）都是确定性的坏结果，理应排在 TRANSIENT / UNKNOWN 前面。
+        """
+        order = [Outcome.FAILED, Outcome.NOT_ADVANCED, Outcome.NO_TARGET,
+                 Outcome.TRANSIENT, Outcome.UNKNOWN,
                  Outcome.RENEWED, Outcome.ALREADY_MAX, Outcome.SKIPPED]
         for o in order:
             if any(r.outcome is o for r in self.results):
@@ -137,8 +152,9 @@ class RenewReport:
         head = f"【{self.service}】"
         tail = ""
         c = self.counts()
-        if c.get("failed"):
-            tail = f"\n\n⚠️ 有 {c['failed']} 台需要人工处理"
+        bad = sum(n for k, n in c.items() if k in _BAD_KEYS)
+        if bad:
+            tail = f"\n\n⚠️ 有 {bad} 台需要人工处理"
         return head + "\n" + "\n\n".join(blocks) + tail
 
     def finish(self, *, notify_tg: bool = True, print_report: bool = True) -> int:

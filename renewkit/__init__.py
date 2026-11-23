@@ -3,28 +3,34 @@
 把各续期仓库重复实现的这几块收成一处：
     · env        环境变量读取与校验、DRY_RUN
     · http       带退避重试的 Session，区分「上游故障」与「真失败」
-    · outcome    统一的结果分类（成功/跳过/已满/结果未确认/上游故障/真失败）
+    · outcome    统一的结果分类（成功/跳过/已满/结果未确认/上游故障/未推进/无对象/真失败）
+    · verdict    判据文件：脚本落结论，composite action 收口定 run 颜色
     · timeutil   面板到期时间的各种格式解析
     · notify     Telegram 通知（失败不影响 job 结论；HTML parse_mode + 内联键盘）
     · report     统一的中文报告排版与退出码（可传 renderer 保留自家排版）
 
 设计原则：
     1. 上游 5xx / 超时 -> TRANSIENT，exit 0，不标红。
-    2. 只有确定性的业务失败才是 FAILED，exit 1。
+    2. 只有确定性的坏结果才是 FAILED / NOT_ADVANCED / NO_TARGET，exit 1。
+       ⚠️ 「run 绿」只等于「没有坏结果」，从来不等于「续期成功」；
+          算成功必须带量推进（天数/台数）或站点自报 renewed。
     3. 通知失败不影响续期结论。
 """
+from . import verdict
 from .http import summarize_http_failure
-from .outcome import Outcome, classify_status
+from .outcome import Outcome, classify_progress, classify_status
 from .report import RenewReport, TargetResult, shorten
 
-__version__ = "0.5.3"
+__version__ = "0.6.0"
 
 __all__ = [
     "Outcome",
+    "classify_progress",
     "classify_status",
     "RenewReport",
     "TargetResult",
     "shorten",
     "summarize_http_failure",
+    "verdict",
     "__version__",
 ]

@@ -69,6 +69,23 @@ inputs:
     description: 脚本失败时兜底发一条 Telegram 通知
     required: false
     default: "true"
+  enforce-outcome:
+    description: >-
+      收口判据（v0.6.0）：脚本跑完后读判据文件，NOT_ADVANCED（点过续期但到期日
+      没推进）/ NO_TARGET（0 个可续对象）/ 缺判据，一律让 job 标红。
+      默认开 —— 「脚本 exit 0」不等于「续期成功」，假绿就是这么来的。
+    required: false
+    default: "true"
+  outcome-file:
+    description: 判据文件路径（相对 working-directory）
+    required: false
+    default: "renewkit-outcome.json"
+  allow-missing-outcome:
+    description: >-
+      允许脚本不落判据文件（默认 false：没有判据不能算成功）。
+      给还没改造的仓库一个过渡开关，别用来掩盖已确定的失败。
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -162,6 +179,29 @@ runs:
           python "$RENEW_SCRIPT"
         fi
 
+    - name: Gate on renewal outcome
+      if: success() && inputs.enforce-outcome == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # 判据值走 env，正文里不插值 —— 与 "Run renewal script" 同一个理由，
+      # 免得占位符取空值时把分支写残。
+      env:
+        RENEWKIT_OUTCOME_FILE: ${{ inputs.outcome-file }}
+        RENEWKIT_ALLOW_MISSING: ${{ inputs.allow-missing-outcome }}
+      run: |
+        set -uo pipefail
+        # 调用方关掉 install-renewkit 时 renewkit 不在环境里，这时不能红 ——
+        # 那是它自己选了「不要收口」，不是续期失败。
+        if ! python -c "import renewkit.verdict" >/dev/null 2>&1; then
+          echo "::warning::renewkit 未安装（install-renewkit=false），跳过判据收口"
+          exit 0
+        fi
+        if [ "$RENEWKIT_ALLOW_MISSING" = "true" ]; then
+          python -m renewkit.verdict --allow-missing
+        else
+          python -m renewkit.verdict
+        fi
+
     - name: Upload failure artifacts
       if: failure() && inputs.artifact-paths != ''
       uses: actions/upload-artifact@v4
@@ -191,7 +231,12 @@ runs:
           echo "未配置 Telegram，跳过兜底通知"
           exit 0
         fi
-        TEXT="🚨 ${{ github.repository }} · 续期脚本异常退出
+        # 收口判据（v0.6.0）也会走到这里 —— 那种情况下脚本自己退出得干干净净，
+        # 再报「脚本异常退出」就是假消息。判据值由 renewkit.verdict.record()
+        # 写进 $GITHUB_ENV，跨步骤可读。
+        WHY="${RENEWKIT_OUTCOME:-脚本异常退出}"
+        TEXT="🚨 ${{ github.repository }} · 续期本轮未通过
+        ℹ️ 判据: ${WHY}
         ℹ️ 运行: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         curl -sS --max-time 20 -o /dev/null \
           "https://api.telegram.org/bot${TOKEN}/sendMessage" \
