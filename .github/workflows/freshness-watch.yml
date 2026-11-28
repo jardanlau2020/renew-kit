@@ -1,0 +1,55 @@
+name: Freshness Watch (read-only)
+
+# Purpose: catch the "silently frozen" class of failure.
+# A repo's Actions can stop while its output keeps changing (an external host
+# pushing with a PAT), and it can also stop while nobody notices. Run history
+# alone cannot tell those apart, so this checks BOTH: last schedule run age AND
+# last commit age.
+#
+# Read-only: GET requests only. contents:read, no writes, no dispatching others.
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: 'Comma separated repo names under jardanlau2020'
+        required: false
+        default: 'freesub,ACLClouds,CF-Workers-docker.io'
+      fresh_max_h:
+        description: 'Commit freshness threshold in hours'
+        required: false
+        default: '24'
+      sched_max_h:
+        description: 'Max acceptable hours since last schedule run'
+        required: false
+        default: '36'
+  # validation-only trigger on this feature branch; drop before merge
+  push:
+    branches:
+      - feat/freshness-watch
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Freshness check (read-only)
+        env:
+          WATCH_OWNER: jardanlau2020
+          WATCH_REPOS: ${{ inputs.repos || 'freesub,ACLClouds,CF-Workers-docker.io' }}
+          FRESH_MAX_H: ${{ inputs.fresh_max_h || '24' }}
+          SCHED_MAX_H: ${{ inputs.sched_max_h || '36' }}
+          WATCH_TOKEN: ${{ secrets.WATCH_TOKEN }}
+        run: python tools/freshness_watch.py
