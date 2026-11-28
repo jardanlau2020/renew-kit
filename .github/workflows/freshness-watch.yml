@@ -1,11 +1,12 @@
 name: Freshness Watch (read-only)
 
 # Purpose: catch the "silently frozen" class of failure.
-# A repo's Actions can stop while its output keeps changing (external pusher),
-# and it can also stop while nobody notices. Run history alone cannot tell
-# those apart, so this checks both: last schedule run AND last commit age.
+# A repo's Actions can stop while its output keeps changing (an external host
+# pushing with a PAT), and it can also stop while nobody notices. Run history
+# alone cannot tell those apart, so this checks BOTH: last schedule run age AND
+# last commit age.
 #
-# Read-only: GET requests only, contents:read, no writes, no dispatch of others.
+# Read-only: GET requests only. contents:read, no writes, no dispatching others.
 
 on:
   schedule:
@@ -24,6 +25,10 @@ on:
         description: 'Max acceptable hours since last schedule run'
         required: false
         default: '36'
+  # validation-only trigger on this feature branch; drop before merge
+  push:
+    branches:
+      - feat/freshness-watch
 
 permissions:
   contents: read
